@@ -1,0 +1,6 @@
+{
+  "name": "Ami Probashi Official Portal",
+  "description": "Official government portal for expatriates to download documents and register for services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

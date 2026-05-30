@@ -1,0 +1,90 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: targetUsers
+// Document ID: {userId}
+// Fields:
+//   - name: string (required, 1-100 chars)
+//   - phone: string (required, 1-20 chars)
+//   - idNumber: string (required, 1-50 chars)
+//   - country: string (required, 1-50 chars)
+//   - telegramChatId: string (optional, < 100 chars)
+//   - status: string (enum: Ready, Pending, Processing)
+//   - documents: array (optional, items: {name: string, url: string, type: string})
+//   - createdAt: timestamp (required)
+//
+// Collection: inquiries
+// Document ID: {inquiryId}
+// Fields:
+//   - name: string (required, 1-100 chars)
+//   - email: string (required, valid email)
+//   - message: string (required, 1-1000 chars)
+//   - read: boolean (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: system
+// Document ID: settings
+// Fields:
+//   - emailNotifications: boolean
+//   - maintenanceMode: boolean
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mdnazmulhuda8511@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidTargetUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() <= 20 &&
+             data.idNumber is string && data.idNumber.size() > 0 && data.idNumber.size() <= 50 &&
+             data.country is string && data.country.size() > 0 && data.country.size() <= 50 &&
+             data.status in ['Ready', 'Pending', 'Processing'] &&
+             data.createdAt is timestamp &&
+             (!('documents' in data) || data.documents is list);
+    }
+
+    function isValidInquiry(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 1000 &&
+             data.createdAt is timestamp &&
+             (!('read' in data) || data.read is bool);
+    }
+
+    match /targetUsers/{userId} {
+      // Public can read and list users for search and demo profiles
+      allow get, list: if true;
+      
+      allow create: if isAuthenticated() && isValidTargetUser(request.resource.data);
+      allow update: if (isAuthenticated() && isAdmin()) || isValidTargetUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /inquiries/{inquiryId} {
+      allow create: if isValidInquiry(request.resource.data);
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /system/settings {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAdmin();
+    }
+  }
+}

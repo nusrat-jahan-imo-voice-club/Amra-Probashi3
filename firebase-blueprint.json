@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "TargetUser": {
+      "title": "Target User",
+      "description": "Information for the expatriate user to be displayed on the ID card.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the user"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the user"
+        },
+        "idNumber": {
+          "type": "string",
+          "description": "Government ID or Passport number"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country where the expatriate is located"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "URL of the user's profile photo"
+        },
+        "telegramChatId": {
+          "type": "string",
+          "description": "Collected Telegram Chat ID"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of documents (e.g., Ready, Pending)",
+          "enum": ["Ready", "Pending", "Processing"]
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "phone", "idNumber", "country"]
+    },
+    "Inquiry": {
+      "title": "Contact Inquiry",
+      "description": "User inquiries from the Contact Us form.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "message"]
+    },
+    "Settings": {
+      "title": "System Settings",
+      "description": "Global system settings for the application.",
+      "type": "object",
+      "properties": {
+        "emailNotifications": { "type": "boolean" },
+        "maintenanceMode": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/targetUsers/{userId}": {
+      "schema": "TargetUser",
+      "description": "Collection of target expatriate users."
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "Collection of contact inquiries."
+    },
+    "/system/settings": {
+      "schema": "Settings",
+      "description": "Global system settings."
+    }
+  }
+}
